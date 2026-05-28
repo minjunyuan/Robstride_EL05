@@ -9,6 +9,12 @@ motor.move_pp_deg(10)
 motor.motion_control(...)
 ```
 
+## 学习文档
+
+EL05 学习笔记与协议理解记录：
+
+[飞书文档：EL05 学习记录](https://scnmu7oloz8g.feishu.cn/wiki/WyHIw5TiliSA7Nk6tpLcobXZnRH)
+
 ## 通信背景
 
 当前控制链路是：
