@@ -173,6 +173,12 @@ motor.move_pp_deg(10, speed=1.0, acc=1.0)
 motor.run_speed(rad_s=0.5, limit_current=2.0, acc=1.0)
 ```
 
+完整示例见：
+
+```powershell
+python examples/speed_mode_basic.py
+```
+
 ### 电流模式
 
 电流模式发送 Iq 电流指令，风险较高，因为它不是位置目标控制。
@@ -183,6 +189,12 @@ motor.run_current(amp=0.2)
 
 初学和普通位置控制不建议优先使用电流模式。
 
+完整示例见：
+
+```powershell
+python examples/current_mode_basic.py
+```
+
 ### CSP 位置模式
 
 CSP 适合上位机自己生成轨迹点，并周期性发送位置目标。
@@ -190,6 +202,12 @@ CSP 适合上位机自己生成轨迹点，并周期性发送位置目标。
 ```python
 motor.configure_csp(limit_speed=1.0)
 motor.set_csp_target_deg(10)
+```
+
+完整示例见：
+
+```powershell
+python examples/csp_position_basic.py
 ```
 
 ### 运控模式
@@ -291,4 +309,7 @@ motor.get_fault_bits(max_age=0.5)
 3. 运行 `examples/pp_minimal.py` 测试库版本 PP 控制。
 4. 运行 `examples/pp_with_limits.py` 使用速度/加速度限制。
 5. 确认 PP 稳定后，再尝试 `examples/motion_control_basic.py`。
-6. 需要实时跟随时，再参考 `examples/head_follow_motion_safe.py`。
+6. 如需连续轨迹，再参考 `examples/csp_position_basic.py`。
+7. 如需连续旋转，再参考 `examples/speed_mode_basic.py`。
+8. 如需电流实验，再参考 `examples/current_mode_basic.py`，并使用极小电流短时间测试。
+9. 需要实时跟随时，再参考 `examples/head_follow_motion_safe.py`。
