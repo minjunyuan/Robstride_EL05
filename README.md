@@ -15,6 +15,14 @@ EL05 学习笔记与协议理解记录：
 
 [飞书文档：EL05 学习记录](https://scnmu7oloz8g.feishu.cn/wiki/WyHIw5TiliSA7Nk6tpLcobXZnRH)
 
+## 硬件图片
+
+以下图片为作者实拍，仅用于硬件识别和连接说明。
+
+| EL05 电机 | USB-CAN 板 |
+| --- | --- |
+| <img src="images/el05.jpg" width="360"> | <img src="images/usb_can.jpg" width="360"> |
+
 ## 通信背景
 
 当前控制链路是：
