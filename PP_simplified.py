@@ -4,7 +4,7 @@ import time
 import struct
 
 # ===== 参数（你只改这里）=====
-PORT = "COM6"
+PORT = "COM7"
 BAUD = 921600
 MOTOR_ID = 1
 ANGLE_DEG = 0

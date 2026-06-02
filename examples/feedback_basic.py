@@ -2,19 +2,21 @@ import time
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from el05 import EL05
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from el05 import EL05Bus
 
 
 # 只读取反馈，不使能，不发目标位置。
-with EL05(port="COM6", motor_id=1) as motor:
-    motor.flush_rx()
-    motor.stop()
+MOTOR_ID = 1
+
+with EL05Bus(port="COM7") as bus:
+    bus.flush_rx()
+    bus.stop(MOTOR_ID)
     time.sleep(0.05)
 
     for _ in range(20):
-        motor.update_feedback(0.05)
-        info = motor.feedback_summary(max_age=0.5)
+        bus.update_feedback(0.05)
+        info = bus.feedback_summary(MOTOR_ID, max_age=0.5)
         if info is None:
             print("no recent feedback")
         else:

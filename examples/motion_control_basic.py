@@ -3,27 +3,35 @@ import time
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from el05 import EL05
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from el05 import EL05Bus
 
 
 # 运控模式基础示例。先确认 PP 模式稳定后再测试。
-with EL05(port="COM6", motor_id=1) as motor:
-    motor.stop()
-    time.sleep(0.08)
-    motor.configure_motion()
-    motor.require_no_fault(timeout=0.5)
+MOTOR_ID = 1
+TARGET_DEG = 360.0
+CONTROL_HZ = 100
+CONTROL_TIME = 2.0
 
-    target = 0 * math.pi / 180
-    for _ in range(200):
-        motor.receive_feedback(0.001)
-        motor.motion_control_safe(
-            pos_rad=target,
+with EL05Bus(port="COM7") as bus:
+    bus.stop(MOTOR_ID)
+    time.sleep(0.08)
+    bus.configure_motion(MOTOR_ID)
+    bus.require_no_fault(MOTOR_ID, timeout=0.5)
+
+    target_rad = math.radians(TARGET_DEG)
+    steps = int(CONTROL_TIME * CONTROL_HZ)
+
+    for _ in range(steps):
+        bus.receive_feedback(0.001)
+        bus.motion_control(
+            MOTOR_ID,
+            pos_rad=target_rad,
             vel_rad_s=0.0,
-            kp=0.8,
-            kd=0.5,
+            kp=2.0,
+            kd=1.8,
             torque_nm=0.0,
         )
-        time.sleep(0.01)
+        time.sleep(1 / CONTROL_HZ)
 
-    motor.stop()
+    bus.stop(MOTOR_ID)

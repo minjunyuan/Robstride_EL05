@@ -4,32 +4,32 @@
 
 推荐顺序：
 
-1. `read_feedback.py`  
+1. `feedback_basic.py`  
    只读取反馈，不使能、不发目标位置。用于检查通信、接线、电机是否有返回。
 
-2. `pp_minimal.py`  
-   最小 PP 位置控制：切 PP -> 使能 -> 发目标角度。适合确认库能驱动电机。
+2. `pp_basic.py`  
+   PP 位置控制：设置速度/加速度限制，然后发送目标角度。适合确认库能驱动电机。
 
-3. `pp_with_limits.py`  
-   PP 位置控制，并显式设置速度和加速度。比最小 PP 更适合日常调试。
-
-4. `motion_control_basic.py`  
+3. `motion_control_basic.py`  
    运控模式基础示例，使用反馈检查和保守的 `Kp/Kd`。确认 PP 稳定后再测试。
 
-5. `csp_position_basic.py`  
+4. `csp_basic.py`  
    CSP 位置模式示例。上位机周期性发送小幅正弦位置点。
 
-6. `speed_mode_basic.py`  
+5. `speed_basic.py`  
    速度模式示例。适合连续旋转机构；有限角度关节上谨慎使用。
 
-7. `current_mode_basic.py`  
+6. `current_basic.py`  
    电流模式示例。风险最高，只用很小电流短时间测试。
 
 
 补充：
 
-- `recover_check_no_motion.py`  
+- `check_no_motion.py`  
   低风险恢复/检查脚本：清故障、读版本、停止。不使能、不发目标。
+
+- `workflow_motion_user_zero.py`
+  推荐工作流示例：检查反馈、配置运控、建立用户零点、用用户坐标控制。
 
 注意：
 

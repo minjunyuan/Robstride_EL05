@@ -5,8 +5,8 @@
 项目目标是把底层的 CAN ID、参数 index、字节序、串口封装等细节封装起来，让使用者可以用更清楚的 Python 方法控制电机，例如：
 
 ```python
-motor.move_pp_deg(10)
-motor.motion_control(...)
+bus.move_pp_deg(MOTOR_ID, 10)
+bus.motion_control(MOTOR_ID, ...)
 ```
 
 ## 学习文档
@@ -74,7 +74,7 @@ packed_id = (can_id << 3) | 0x04
   已经实测可动的 PP 模式最小脚本，作为基准保留。
 
 - `examples/`  
-  示例脚本目录。每个示例的用途和建议运行顺序见 `examples/README.md`。
+  示例脚本目录。保留通信检查、反馈读取、PP、运控、用户零点工作流、速度、电流、CSP 的基础示例；每个示例的用途和建议运行顺序见 `examples/README.md`。
 
 - `CAN-USB/`  
   CAN ID 与串口包装 ID 的转换小工具。
@@ -105,18 +105,22 @@ pyserial
 
 ## 快速开始
 
+仓库里的示例脚本会自动把 `lib/` 加入 Python 搜索路径。如果你自己新建脚本，建议先复制 `examples/pp_basic.py` 的文件头部。
+
 最小 PP 位置控制：
 
 ```python
 import time
-from el05 import EL05
+from el05 import EL05Bus
 
-with EL05(port="COM6", motor_id=1) as motor:
-    motor.set_pp_mode()
+MOTOR_ID = 1
+
+with EL05Bus(port="COM6") as bus:
+    bus.set_pp_mode(MOTOR_ID)
     time.sleep(0.05)
-    motor.enable()
+    bus.enable(MOTOR_ID)
     time.sleep(0.05)
-    motor.set_target_deg(10)
+    bus.set_target_deg(MOTOR_ID, 10)
     time.sleep(2.0)
 ```
 
@@ -124,15 +128,17 @@ with EL05(port="COM6", motor_id=1) as motor:
 
 ```python
 import time
-from el05 import EL05
+from el05 import EL05Bus
 
-with EL05(port="COM6", motor_id=1) as motor:
-    motor.stop()
+MOTOR_ID = 1
+
+with EL05Bus(port="COM6") as bus:
+    bus.stop(MOTOR_ID)
     time.sleep(0.08)
-    motor.configure_pp(speed=1.0, acc=1.0)
-    motor.set_target_deg(10)
+    bus.configure_pp(MOTOR_ID, speed=1.0, acc=1.0)
+    bus.set_target_deg(MOTOR_ID, 10)
     time.sleep(2.0)
-    motor.stop()
+    bus.stop(MOTOR_ID)
 ```
 
 运控模式示例：
@@ -140,18 +146,21 @@ with EL05(port="COM6", motor_id=1) as motor:
 ```python
 import math
 import time
-from el05 import EL05
+from el05 import EL05Bus
 
-with EL05(port="COM6", motor_id=1) as motor:
-    motor.stop()
+MOTOR_ID = 1
+
+with EL05Bus(port="COM6") as bus:
+    bus.stop(MOTOR_ID)
     time.sleep(0.08)
-    motor.configure_motion()
-    motor.require_no_fault(timeout=0.5)
+    bus.configure_motion(MOTOR_ID)
+    bus.require_no_fault(MOTOR_ID, timeout=0.5)
 
     target = 5 * math.pi / 180
     for _ in range(200):
-        motor.receive_feedback(0.001)
-        motor.motion_control_safe(
+        bus.receive_feedback(0.001)
+        bus.motion_control(
+            MOTOR_ID,
             pos_rad=target,
             vel_rad_s=0.0,
             kp=3.0,
@@ -160,7 +169,7 @@ with EL05(port="COM6", motor_id=1) as motor:
         )
         time.sleep(0.01)
 
-    motor.stop()
+    bus.stop(MOTOR_ID)
 ```
 
 实时跟随时不要每条指令后等待 `0.2~0.5s`。更合理的结构是：初始化阶段等待反馈确认，实时阶段固定频率循环，持续读取最近反馈，并设置反馈超时保护。
@@ -176,9 +185,9 @@ PP 更像点到点运动：单次运动可以平滑，但连续目标频繁变�
 常用方法：
 
 ```python
-motor.configure_pp(speed=1.0, acc=1.0)
-motor.set_target_deg(10)
-motor.move_pp_deg(10, speed=1.0, acc=1.0)
+bus.configure_pp(MOTOR_ID, speed=1.0, acc=1.0)
+bus.set_target_deg(MOTOR_ID, 10)
+bus.move_pp_deg(MOTOR_ID, 10, speed=1.0, acc=1.0)
 ```
 
 ### 速度模式
@@ -186,13 +195,13 @@ motor.move_pp_deg(10, speed=1.0, acc=1.0)
 适合连续旋转机构，例如轮子、转台。有限角度关节上要谨慎使用。
 
 ```python
-motor.run_speed(rad_s=0.5, limit_current=2.0, acc=1.0)
+bus.run_speed(MOTOR_ID, rad_s=0.5, limit_current=2.0, acc=1.0)
 ```
 
 完整示例见：
 
 ```powershell
-python examples/speed_mode_basic.py
+python examples/speed_basic.py
 ```
 
 ### 电流模式
@@ -200,7 +209,7 @@ python examples/speed_mode_basic.py
 电流模式发送 Iq 电流指令，风险较高，因为它不是位置目标控制。
 
 ```python
-motor.run_current(amp=0.2)
+bus.run_current(MOTOR_ID, amp=0.2)
 ```
 
 初学和普通位置控制不建议优先使用电流模式。
@@ -208,7 +217,7 @@ motor.run_current(amp=0.2)
 完整示例见：
 
 ```powershell
-python examples/current_mode_basic.py
+python examples/current_basic.py
 ```
 
 ### CSP 位置模式
@@ -216,14 +225,14 @@ python examples/current_mode_basic.py
 CSP 适合上位机自己生成轨迹点，并周期性发送位置目标。
 
 ```python
-motor.configure_csp(limit_speed=1.0)
-motor.set_csp_target_deg(10)
+bus.configure_csp(MOTOR_ID, limit_speed=1.0)
+bus.set_csp_target_deg(MOTOR_ID, 10)
 ```
 
 完整示例见：
 
 ```powershell
-python examples/csp_position_basic.py
+python examples/csp_basic.py
 ```
 
 ### 运控模式
@@ -246,7 +255,7 @@ tau = Kp * (pos_des - pos_actual)
 
 `vel_rad_s = 0` 不代表电机不能动，只代表期望速度为 0。只要位置误差不为 0，电机仍会因为位置项而运动。
 
-实时控制建议使用 `motion_control_safe()`，它会检查反馈超时、故障位，并限制位置、速度、`Kp`、`Kd` 和前馈力矩。
+运控模式使用 `motion_control()` 发送控制帧。参数必须在说明书量程内，超范围会直接报错。
 
 下面的仿真图展示了 PP 点到点风格和运控连续跟随风格的曲线差异：
 
@@ -267,7 +276,7 @@ tau = Kp * (pos_des - pos_actual)
 可以运行：
 
 ```powershell
-python examples/recover_check_no_motion.py
+python examples/check_no_motion.py
 ```
 
 这个脚本只发送停止/清故障和读取版本命令，不会使能电机，也不会发送目标位置。
@@ -293,23 +302,25 @@ python examples/recover_check_no_motion.py
 示例：
 
 ```python
-from el05 import EL05
+from el05 import EL05Bus
 
-with EL05(port="COM6", motor_id=1) as motor:
-    motor.stop()
-    feedback = motor.update_feedback(0.1)
-    print(motor.feedback_summary())
+MOTOR_ID = 1
+
+with EL05Bus(port="COM6") as bus:
+    bus.stop(MOTOR_ID)
+    bus.update_feedback(0.1)
+    print(bus.feedback_summary(MOTOR_ID))
 ```
 
 常用方法：
 
 ```python
-motor.update_feedback(0.01)
-motor.get_position_deg(max_age=0.5)
-motor.get_velocity_rad_s(max_age=0.5)
-motor.get_torque_nm(max_age=0.5)
-motor.get_temperature_c(max_age=0.5)
-motor.get_fault_bits(max_age=0.5)
+bus.update_feedback(0.01)
+bus.get_position_deg(MOTOR_ID, max_age=0.5)
+bus.get_velocity_rad_s(MOTOR_ID, max_age=0.5)
+bus.get_torque_nm(MOTOR_ID, max_age=0.5)
+bus.get_temperature_c(MOTOR_ID, max_age=0.5)
+bus.get_fault_bits(MOTOR_ID, max_age=0.5)
 ```
 
 注意：`mode_state` 是电机状态机状态，例如 Reset/Cali/Motor，不等于 `run_mode` 的 PP/速度/电流/运控。
@@ -317,6 +328,9 @@ motor.get_fault_bits(max_age=0.5)
 ## 当前限制
 
 - 当前库实现的是 EL05 私有协议。
+- 私有协议下的主要运行模式已经覆盖：运控模式、PP 位置模式、速度模式、电流模式、CSP 位置模式。
+- `zero_sta` 使用说明书类型 18 写入参数 `0x7029`，如需断电保持，需要再发送类型 22 保存参数。
+- 支持软件用户零点：可用 `set_user_zero()` 把当前 raw 位置记录为用户坐标 0 度；也可用 `set_nearest_zero_as_user_zero()` 把当前附近最近的整圈零点记录为用户 0 度，避免 0/360 误判。
 - 当前库没有实现 MIT 标准帧协议。
 - 当前库没有实现 CANopen。
 - USB-CAN 串口封装规则来自当前硬件链路和已验证代码，不是 EL05 说明书本身。
@@ -324,12 +338,11 @@ motor.get_fault_bits(max_age=0.5)
 
 ## 推荐使用顺序
 
-1. 运行 `examples/recover_check_no_motion.py` 检查通信。
+1. 运行 `examples/check_no_motion.py` 检查通信。
 2. 运行 `PP_simplified.py` 确认基准脚本可动。
-3. 运行 `examples/pp_minimal.py` 测试库版本 PP 控制。
-4. 运行 `examples/pp_with_limits.py` 使用速度/加速度限制。
-5. 确认 PP 稳定后，再尝试 `examples/motion_control_basic.py`。
-6. 如需连续轨迹，再参考 `examples/csp_position_basic.py`。
-7. 如需连续旋转，再参考 `examples/speed_mode_basic.py`。
-8. 如需电流实验，再参考 `examples/current_mode_basic.py`，并使用极小电流短时间测试。
-9. 需要实时跟随时，再参考 `examples/head_follow_motion_safe.py`。
+3. 运行 `examples/pp_basic.py` 测试库版本 PP 控制。
+4. 确认 PP 稳定后，再尝试 `examples/motion_control_basic.py`。
+5. 做有限角度关节控制时，参考 `examples/workflow_motion_user_zero.py` 建立用户零点。
+6. 如需连续轨迹，再参考 `examples/csp_basic.py`。
+7. 如需连续旋转，再参考 `examples/speed_basic.py`。
+8. 如需电流实验，再参考 `examples/current_basic.py`，并使用极小电流短时间测试。
