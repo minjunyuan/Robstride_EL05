@@ -6,7 +6,8 @@ el05.py - EL05 / RobStride EDULITE 05 私有 CAN 协议库
     from el05 import EL05Bus
 
     with EL05Bus(port="COM7") as bus:
-        bus.configure_motion(1)
+        bus.set_motion_mode(1)
+        bus.enable(1)
         bus.motion_control(1, pos_rad=0.0, kp=2.0, kd=0.4)
 
 说明：
@@ -100,11 +101,6 @@ def uint_to_float(x: int, x_min: float, x_max: float, bits: int) -> float:
     return int(x) * (x_max - x_min) / ((1 << bits) - 1) + x_min
 
 
-def wrap_to_pi(rad: float) -> float:
-    """把角度折算到 -π ~ π，防止 0° 附近被当成 360°。"""
-    return ((float(rad) + math.pi) % (2 * math.pi)) - math.pi
-
-
 def make_can_id(comm_type: int, data2: int, motor_id: int) -> int:
     """EL05 29 位 CAN ID：通信类型 | 数据区2 | 目标电机 ID。"""
     comm_type = require_int_range("comm_type", comm_type, 0, 0x1F)
@@ -183,7 +179,6 @@ class EL05Bus:
         self.ser = serial.Serial(port, baud, timeout=timeout)
         self._rx_buffer = bytearray()
         self.feedback: Dict[int, Feedback] = {}
-        self.user_zero: Dict[int, float] = {}
         time.sleep(0.2)
 
         # 某些 USB-CAN 转接板可能需要 AT 握手；当前示例验证不需要，默认关闭。
@@ -250,10 +245,10 @@ class EL05Bus:
         """通信类型 22：保存参数。"""
         return self.send_private(motor_id, 0x16, bytes(8))
 
-    def enable_active_report(self, motor_id: int, enable: bool = True) -> bytes:
+    def set_feedback_active(self, motor_id: int, enabled: bool = True) -> bytes:
         """通信类型 24：主动反馈开关。"""
         data = bytearray(8)
-        data[6] = 1 if enable else 0
+        data[6] = 1 if enabled else 0
         return self.send_private(motor_id, 0x18, data)
 
     # ---------- 参数读写 ----------
@@ -295,18 +290,11 @@ class EL05Bus:
         data[0:2] = struct.pack("<H", index)
         return self.send_private(motor_id, 0x11, data)
 
-    def set_zero_sta(self, motor_id: int, sta: int, save: bool = False, delay: float = 0.1) -> bytes:
+    def set_zero_sta(self, motor_id: int, sta: int) -> bytes:
         """设置 zero_sta：0=上电位置 0~2π；1=上电位置 -π~π。"""
         if sta not in (0, 1):
             raise ValueError("zero_sta 只能是 0 或 1")
-        self.stop(motor_id)
-        time.sleep(delay)
-        frame = self.write_param_u8(motor_id, IDX_ZERO_STA, sta)
-        time.sleep(delay)
-        if save:
-            self.save_params(motor_id)
-            time.sleep(delay)
-        return frame
+        return self.write_param_u8(motor_id, IDX_ZERO_STA, sta)
 
     # ---------- 模式切换 ----------
 
@@ -339,6 +327,7 @@ class EL05Bus:
         return self.write_param_float(motor_id, IDX_ACC_SET, rad_s2)
 
     def set_target_rad(self, motor_id: int, rad: float) -> bytes:
+        rad = require_float_range("target position rad", rad, P_MIN, P_MAX)
         return self.write_param_float(motor_id, IDX_LOC_REF, rad)
 
     def set_target_deg(self, motor_id: int, deg: float) -> bytes:
@@ -361,160 +350,6 @@ class EL05Bus:
 
     def set_current_ref(self, motor_id: int, amp: float) -> bytes:
         return self.write_param_float(motor_id, IDX_IQ_REF, amp)
-
-    # ---------- 各模式常用配置 ----------
-
-    def configure_motion(
-        self,
-        motor_id: int,
-        stop_first: bool = True,
-        enable: bool = True,
-        active_report: bool = True,
-        delay: float = 0.05,
-    ) -> None:
-        if stop_first:
-            self.stop(motor_id)
-            time.sleep(delay)
-        self.set_motion_mode(motor_id)
-        time.sleep(delay)
-        if enable:
-            self.enable(motor_id)
-            time.sleep(delay)
-        if active_report:
-            self.enable_active_report(motor_id, True)
-            time.sleep(delay)
-
-    def configure_pp(
-        self,
-        motor_id: int,
-        speed: Optional[float] = None,
-        acc: Optional[float] = None,
-        stop_first: bool = True,
-        enable: bool = True,
-        delay: float = 0.05,
-    ) -> None:
-        if stop_first:
-            self.stop(motor_id)
-            time.sleep(delay)
-        self.set_pp_mode(motor_id)
-        time.sleep(delay)
-        if enable:
-            self.enable(motor_id)
-            time.sleep(delay)
-        if speed is not None:
-            self.set_pp_speed(motor_id, speed)
-            time.sleep(delay)
-        if acc is not None:
-            self.set_pp_acc(motor_id, acc)
-            time.sleep(delay)
-
-    def move_pp_rad(
-        self,
-        motor_id: int,
-        rad: float,
-        speed: Optional[float] = None,
-        acc: Optional[float] = None,
-        configure: bool = True,
-        delay: float = 0.05,
-    ) -> bytes:
-        if configure:
-            self.configure_pp(motor_id, speed=speed, acc=acc, delay=delay)
-        return self.set_target_rad(motor_id, rad)
-
-    def move_pp_deg(
-        self,
-        motor_id: int,
-        deg: float,
-        speed: Optional[float] = None,
-        acc: Optional[float] = None,
-        configure: bool = True,
-        delay: float = 0.05,
-    ) -> bytes:
-        return self.move_pp_rad(motor_id, deg * math.pi / 180.0, speed, acc, configure, delay)
-
-    def configure_speed(
-        self,
-        motor_id: int,
-        limit_current: Optional[float] = None,
-        acc: Optional[float] = None,
-        stop_first: bool = True,
-        enable: bool = True,
-        delay: float = 0.05,
-    ) -> None:
-        if stop_first:
-            self.stop(motor_id)
-            time.sleep(delay)
-        self.set_speed_mode(motor_id)
-        time.sleep(delay)
-        if enable:
-            self.enable(motor_id)
-            time.sleep(delay)
-        if limit_current is not None:
-            self.set_limit_current(motor_id, limit_current)
-            time.sleep(delay)
-        if acc is not None:
-            self.set_speed_acc(motor_id, acc)
-            time.sleep(delay)
-
-    def run_speed(
-        self,
-        motor_id: int,
-        rad_s: float,
-        limit_current: Optional[float] = None,
-        acc: Optional[float] = None,
-        configure: bool = True,
-        delay: float = 0.05,
-    ) -> bytes:
-        if configure:
-            self.configure_speed(motor_id, limit_current=limit_current, acc=acc, delay=delay)
-        return self.set_speed_ref(motor_id, rad_s)
-
-    def configure_current(
-        self,
-        motor_id: int,
-        stop_first: bool = True,
-        enable: bool = True,
-        delay: float = 0.05,
-    ) -> None:
-        if stop_first:
-            self.stop(motor_id)
-            time.sleep(delay)
-        self.set_current_mode(motor_id)
-        time.sleep(delay)
-        if enable:
-            self.enable(motor_id)
-            time.sleep(delay)
-
-    def run_current(self, motor_id: int, amp: float, configure: bool = True, delay: float = 0.05) -> bytes:
-        if configure:
-            self.configure_current(motor_id, delay=delay)
-        return self.set_current_ref(motor_id, amp)
-
-    def configure_csp(
-        self,
-        motor_id: int,
-        limit_speed: Optional[float] = None,
-        stop_first: bool = True,
-        enable: bool = True,
-        delay: float = 0.05,
-    ) -> None:
-        if stop_first:
-            self.stop(motor_id)
-            time.sleep(delay)
-        self.set_csp_mode(motor_id)
-        time.sleep(delay)
-        if enable:
-            self.enable(motor_id)
-            time.sleep(delay)
-        if limit_speed is not None:
-            self.set_limit_speed(motor_id, limit_speed)
-            time.sleep(delay)
-
-    def set_csp_target_rad(self, motor_id: int, rad: float) -> bytes:
-        return self.set_target_rad(motor_id, rad)
-
-    def set_csp_target_deg(self, motor_id: int, deg: float) -> bytes:
-        return self.set_target_deg(motor_id, deg)
 
     # ---------- 运控模式控制帧 ----------
 
@@ -596,27 +431,12 @@ class EL05Bus:
         missing = [mid for mid in ids if mid not in self.feedback]
         raise TimeoutError(f"no feedback from motor ids: {missing}")
 
-    def update_feedback(self, seconds: float = 0.01) -> List[Feedback]:
-        return self.receive_feedback(seconds)
-
     def get_feedback(self, motor_id: int, max_age: Optional[float] = None) -> Optional[Feedback]:
         fb = self.feedback.get(motor_id)
         if fb is None:
             return None
         if max_age is not None and time.time() - fb.timestamp > max_age:
             return None
-        return fb
-
-    def require_feedback(self, motor_id: int, timeout: float = 0.5) -> Feedback:
-        fb = self.get_feedback(motor_id)
-        if fb is not None:
-            return fb
-        return self.wait_feedback(motor_id, timeout=timeout)  # type: ignore[return-value]
-
-    def require_no_fault(self, motor_id: int, timeout: float = 0.5) -> Feedback:
-        fb = self.require_feedback(motor_id, timeout=timeout)
-        if fb.fault_bits:
-            raise RuntimeError(f"motor {motor_id} fault bits: 0x{fb.fault_bits:02x}")
         return fb
 
     def feedback_age(self, motor_id: int) -> Optional[float]:
@@ -630,47 +450,6 @@ class EL05Bus:
     def get_position_deg(self, motor_id: int, max_age: Optional[float] = None) -> Optional[float]:
         fb = self.get_feedback(motor_id, max_age)
         return None if fb is None else fb.position_deg
-
-    def get_position_rad_fixed(self, motor_id: int, max_age: Optional[float] = None) -> Optional[float]:
-        """把反馈位置折算到 -π~π，适合回零前防止 0/360 误判。"""
-        pos = self.get_position_rad(motor_id, max_age)
-        return None if pos is None else wrap_to_pi(pos)
-
-    def set_user_zero(self, motor_id: int, rad: Optional[float] = None) -> float:
-        """把指定 raw 位置记录为用户坐标 0 点；rad 为空时使用当前反馈位置。"""
-        if rad is None:
-            fb = self.require_feedback(motor_id)
-            rad = fb.position_rad
-        self.user_zero[motor_id] = float(rad)
-        return self.user_zero[motor_id]
-
-    def set_nearest_zero_as_user_zero(self, motor_id: int, max_age: Optional[float] = None) -> float:
-        """把当前附近最近的整圈零点记录为用户坐标 0 点，避免 0/360 误判。"""
-        fb = self.require_feedback(motor_id)
-        fixed = self.get_position_rad_fixed(motor_id, max_age)
-        if fixed is None:
-            raise RuntimeError(f"no feedback from motor {motor_id}")
-        return self.set_user_zero(motor_id, fb.position_rad - fixed)
-
-    def user_to_raw_rad(self, motor_id: int, user_rad: float) -> float:
-        """用户坐标目标角度 -> 电机 raw 坐标目标角度。"""
-        if motor_id not in self.user_zero:
-            raise RuntimeError(f"user zero for motor {motor_id} is not set")
-        return self.user_zero[motor_id] + float(user_rad)
-
-    def raw_to_user_rad(self, motor_id: int, raw_rad: float) -> float:
-        """电机 raw 坐标角度 -> 用户坐标角度。"""
-        if motor_id not in self.user_zero:
-            raise RuntimeError(f"user zero for motor {motor_id} is not set")
-        return float(raw_rad) - self.user_zero[motor_id]
-
-    def get_user_position_rad(self, motor_id: int, max_age: Optional[float] = None) -> Optional[float]:
-        pos = self.get_position_rad(motor_id, max_age)
-        return None if pos is None else self.raw_to_user_rad(motor_id, pos)
-
-    def get_user_position_deg(self, motor_id: int, max_age: Optional[float] = None) -> Optional[float]:
-        pos = self.get_user_position_rad(motor_id, max_age)
-        return None if pos is None else pos * 180.0 / math.pi
 
     def get_velocity_rad_s(self, motor_id: int, max_age: Optional[float] = None) -> Optional[float]:
         fb = self.get_feedback(motor_id, max_age)
@@ -691,21 +470,3 @@ class EL05Bus:
     def get_mode_state(self, motor_id: int, max_age: Optional[float] = None) -> Optional[int]:
         fb = self.get_feedback(motor_id, max_age)
         return None if fb is None else fb.mode_state
-
-    def feedback_summary(self, motor_id: int, max_age: Optional[float] = None) -> Optional[dict]:
-        fb = self.get_feedback(motor_id, max_age)
-        if fb is None:
-            return None
-        return {
-            "motor_id": fb.motor_id,
-            "mode_state": fb.mode_state,
-            "fault_bits": fb.fault_bits,
-            "position_rad": fb.position_rad,
-            "position_deg": fb.position_deg,
-            "position_rad_fixed": wrap_to_pi(fb.position_rad),
-            "position_deg_fixed": wrap_to_pi(fb.position_rad) * 180.0 / math.pi,
-            "velocity_rad_s": fb.velocity_rad_s,
-            "torque_nm": fb.torque_nm,
-            "temperature_c": fb.temperature_c,
-            "age_s": self.feedback_age(motor_id),
-        }

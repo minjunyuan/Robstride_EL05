@@ -28,8 +28,8 @@
 - `check_no_motion.py`  
   低风险恢复/检查脚本：清故障、读版本、停止。不使能、不发目标。
 
-- `workflow_motion_user_zero.py`
-  推荐工作流示例：检查反馈、配置运控、建立用户零点、用用户坐标控制。
+- `motion_return_zero.py`
+  可扩展的多电机回原位初始化示例：调用 `return_motors_to_zero()`，用最近等价 raw 目标回到 wrapped zero。后续动作可以直接写在初始化函数后面。
 
 注意：
 

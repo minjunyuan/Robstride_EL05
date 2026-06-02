@@ -9,15 +9,20 @@ from el05 import EL05Bus
 
 # 运控模式基础示例。先确认 PP 模式稳定后再测试。
 MOTOR_ID = 1
-TARGET_DEG = 360.0
+TARGET_DEG = 180.0
 CONTROL_HZ = 100
 CONTROL_TIME = 2.0
 
 with EL05Bus(port="COM7") as bus:
     bus.stop(MOTOR_ID)
     time.sleep(0.08)
-    bus.configure_motion(MOTOR_ID)
-    bus.require_no_fault(MOTOR_ID, timeout=0.5)
+    bus.set_motion_mode(MOTOR_ID)
+    bus.enable(MOTOR_ID)
+    time.sleep(0.05)
+    bus.set_feedback_active(MOTOR_ID, True)
+    fb = bus.wait_feedback(MOTOR_ID, timeout=0.5)
+    if fb.fault_bits:
+        raise RuntimeError(f"motor {MOTOR_ID} fault bits: 0x{fb.fault_bits:02x}")
 
     target_rad = math.radians(TARGET_DEG)
     steps = int(CONTROL_TIME * CONTROL_HZ)

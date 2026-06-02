@@ -13,9 +13,11 @@ MOTOR_ID = 1
 with EL05Bus(port="COM7") as bus:
     bus.stop(MOTOR_ID)
     time.sleep(0.08)
-
-    bus.configure_current(MOTOR_ID)
-    bus.run_current(MOTOR_ID, amp=0.2, configure=False)
+    bus.set_current_mode(MOTOR_ID)
+    time.sleep(0.05)
+    bus.enable(MOTOR_ID)
+    time.sleep(0.05)
+    bus.set_current_ref(MOTOR_ID, 0.2)
 
     time.sleep(0.2)
 

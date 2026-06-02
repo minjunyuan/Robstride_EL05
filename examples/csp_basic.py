@@ -14,13 +14,17 @@ MOTOR_ID = 1
 with EL05Bus(port="COM6") as bus:
     bus.stop(MOTOR_ID)
     time.sleep(0.08)
-
-    bus.configure_csp(MOTOR_ID, limit_speed=1.0)
+    bus.set_csp_mode(MOTOR_ID)
+    time.sleep(0.05)
+    bus.enable(MOTOR_ID)
+    time.sleep(0.05)
+    bus.set_limit_speed(MOTOR_ID, 1.0)
+    time.sleep(0.05)
 
     for i in range(200):
         t = i * 0.01
         target_deg = 10.0 * math.sin(2 * math.pi * 0.2 * t)
-        bus.set_csp_target_deg(MOTOR_ID, target_deg)
+        bus.set_target_deg(MOTOR_ID, target_deg)
         time.sleep(0.01)
 
     bus.stop(MOTOR_ID)
