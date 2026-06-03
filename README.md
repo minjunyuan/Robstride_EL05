@@ -45,6 +45,22 @@ Python 程序 -> 串口数据 -> USB-CAN 板 -> CAN 帧 -> EL05 电机
 
 如果使用的是带串口协议的 USB-CAN 转换模块，则还需要额外了解该模块自己的串口封装格式。本项目的作用就是在 Python 里完成这层封装：先构造说明书要求的 CAN ID 和 8 字节数据区，再编码成当前 USB-CAN 模块能识别的串口数据。
 
+### 与官方示例和 SocketCAN 的关系
+
+RobStride 官方 GitHub 已提供面向直接 CAN 控制的示例和 Python SDK。官方 Python 示例通常基于 Linux SocketCAN，使用 `can0` 这样的 CAN 网络接口直接发送 CAN 扩展帧。这是更标准的 Linux/树莓派工程路线，适合能被系统识别为 SocketCAN 设备的 CAN 适配器。
+
+本仓库不是为了替代官方 SDK，而是服务于另一类常见实验链路：USB-CAN 模块在电脑上表现为串口设备，例如 Windows 下的 `COM7`，或 Linux/树莓派下的 `/dev/ttyUSB0`。在这种链路中，程序不能直接向 `can0` 发送 CAN 帧，而是必须先把 CAN 帧封装成 USB-CAN 模块规定的串口数据。
+
+因此，本仓库的主要贡献不是“重新发明官方库”，而是：
+
+- 给出一份可读的 EL05 私有协议 Python 实现。
+- 明确区分说明书中的真实 CAN 帧和 USB-CAN 模块的串口封装。
+- 适配 Windows/串口型 USB-CAN 的实验环境。
+- 在树莓派或 Linux 上保留 `/dev/ttyUSB0` 串口链路的可用性。
+- 固化实际调试中需要的启动检查、回原位、最近等价目标和反馈跳变保护。
+
+如果 USB-CAN 模块在 Linux/树莓派上能被识别为 `can0`，则建议优先评估官方 SocketCAN Python SDK；如果它只表现为 `/dev/ttyUSB0` 这类串口设备，则本仓库的串口封装层仍然是必要的。
+
 EL05 说明书规定的是电机最终收到的真实 CAN 帧，包括：
 
 - 29 位扩展 CAN ID
