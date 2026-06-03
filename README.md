@@ -58,6 +58,52 @@ packed_id = (can_id << 3) | 0x04
 
 注意：这个包装规则属于当前 USB-CAN 串口链路，不是 EL05 说明书内容。
 
+## 重要提示与实测坑点
+
+### 1. 不要依赖断电前的多圈位置
+
+EL05 运控位置量程是 `-4π ~ 4π` 附近，但断电重启后，电机反馈或上位机显示的角度可能会被重新映射到单圈范围，例如 `0 ~ 2π`，或在某些配置/显示方式下接近 `-π ~ π`。这意味着断电前的 raw 多圈位置不应被当作重启后的可靠绝对位置。
+
+实际控制时应在每次启动后重新读取当前反馈，把它折算成单圈角度用于判断机械姿态，再用“最近等价 raw 目标”生成发给电机的位置指令。这样即使当前 raw feedback 是 `357.81 deg`，程序也能理解它的单圈角度接近 `-2.19 deg`，并选择最近的等价零位，而不是让电机绕一整圈回到 `0 deg`。
+
+本项目的 `angle_control.return_motors_to_zero()` 就是按这个原则实现的：不记忆断电前用户零点，不假设多圈 raw 位置连续，只使用本次启动后的新鲜反馈。
+
+### 2. 推荐的电机使用顺序
+
+不同控制模式的参数顺序会影响电机是否响应。建议把每个脚本都写成“先确认状态，再切模式，再使能，再写目标”的结构。
+
+通用安全顺序：
+
+```text
+stop -> 打开主动反馈 -> wait_feedback -> 检查姿态/故障 -> set_xxx_mode -> enable -> 写模式参数 -> 发目标 -> finally stop
+```
+
+PP 位置模式建议顺序：
+
+```text
+stop -> set_pp_mode -> enable -> set_pp_speed -> set_pp_acc -> set_target_rad/deg
+```
+
+运控模式建议顺序：
+
+```text
+stop -> set_feedback_active -> wait_feedback -> set_motion_mode -> enable -> receive_feedback + motion_control 循环发送
+```
+
+速度模式建议顺序：
+
+```text
+stop -> set_speed_mode -> enable -> set_limit_current -> set_speed_acc -> set_speed_ref
+```
+
+电流模式风险更高，建议只用很小电流短时间测试：
+
+```text
+stop -> set_current_mode -> enable -> set_current_ref -> set_current_ref(0) -> stop
+```
+
+有限角度关节不建议直接从速度模式或电流模式开始调试。优先用反馈读取和 PP 小角度确认通信、方向、限位和机械安全，再进入运控模式或其它模式。
+
 ## 功能
 
 - 构造 EL05 私有协议 29 位 CAN ID
